@@ -108,7 +108,7 @@ footer{padding:40px 0 56px;font-size:14px;color:var(--mut);border-top:1px solid 
         <h3>Your last 7 days</h3>
         <div class="week" id="week" role="img" aria-label="Bar chart of vocal health scores for the last 7 days"></div>
         <div class="days"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Today</span></div>
-        <ul class="tips" id="tips"><li>Say “aaah” and read one short sentence. The demo simulates a result, no audio is recorded.</li></ul>
+        <ul class="tips" id="tips"><li>Say “aaah” and read one short sentence. Your browser will ask for microphone access.</li></ul>
       </div>
     </div></div>
   </div>
@@ -203,17 +203,33 @@ var vals=[78,81,74,83,79,76],wk=document.getElementById('week'),bars=[];
 for(var i=0;i<7;i++){var d=document.createElement('div');d.style.height=(i<6?vals[i]:0)+'%';if(i<6)d.className='on';wk.appendChild(d);bars.push(d);}
 var rec=document.getElementById('rec'),arc=document.getElementById('arc'),num=document.getElementById('num'),st=document.getElementById('state'),pg=document.getElementById('prog'),tips=document.getElementById('tips');
 function col(s){return s>=80?'var(--ok)':s>=62?'var(--warn)':'var(--bad)';}
-rec.onclick=function(){
-rec.disabled=true;var s=0;rec.textContent='Recording… 10';st.textContent='Say “aaah”, then read one sentence';pg.style.transition='width 10s linear';pg.style.width='100%';
-var iv=setInterval(function(){s++;rec.textContent='Recording… '+(10-s);if(s>=10){clearInterval(iv);done();}},1000);
+var API_URL='https://voicemarker-y93d.onrender.com',SECS=10,feat='';
+function wav(ch,sr){var n=0;ch.forEach(function(c){n+=c.length;});var b=new DataView(new ArrayBuffer(44+n*2));function w(o,s){for(var i=0;i<s.length;i++)b.setUint8(o+i,s.charCodeAt(i));}
+w(0,'RIFF');b.setUint32(4,36+n*2,true);w(8,'WAVEfmt ');b.setUint32(16,16,true);b.setUint16(20,1,true);b.setUint16(22,1,true);b.setUint32(24,sr,true);b.setUint32(28,sr*2,true);b.setUint16(32,2,true);b.setUint16(34,16,true);w(36,'data');b.setUint32(40,n*2,true);
+var o=44;ch.forEach(function(c){for(var i=0;i<c.length;i++){var v=Math.max(-1,Math.min(1,c[i]));b.setInt16(o,v<0?v*32768:v*32767,true);o+=2;}});return new Blob([b],{type:'audio/wav'});}
+function count(){return new Promise(function(res){var s=0;rec.textContent='Recording… '+SECS;pg.style.transition='width '+SECS+'s linear';pg.style.width='100%';var iv=setInterval(function(){s++;rec.textContent='Recording… '+(SECS-s);if(s>=SECS){clearInterval(iv);res();}},1000);});}
+rec.onclick=async function(){
+rec.disabled=true;feat='';st.textContent='Say “aaah”, then read one sentence';
+var stream=null,chunks=[],ctx,proc;
+try{stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+ctx=new (window.AudioContext||window.webkitAudioContext)();var src=ctx.createMediaStreamSource(stream);proc=ctx.createScriptProcessor(4096,1,1);
+proc.onaudioprocess=function(e){chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));};
+var g=ctx.createGain();g.gain.value=0;src.connect(proc);proc.connect(g);g.connect(ctx.destination);}catch(e){stream=null;}
+await count();
+if(!stream){done(Math.round(52+Math.random()*42),' (simulated: microphone not available)');return;}
+proc.disconnect();stream.getTracks().forEach(function(t){t.stop();});var sr=ctx.sampleRate;ctx.close();
+st.textContent='Analyzing…';
+try{var fd=new FormData();fd.append('file',wav(chunks,sr),'voice.wav');var r=await fetch(API_URL+'/analyze',{method:'POST',body:fd});if(!r.ok)throw 0;var j=await r.json();
+var f=j.features||{};if(f.jitter!=null&&f.shimmer!=null)feat='Jitter '+f.jitter+' · Shimmer '+f.shimmer;done(Math.round(j.score),'');}
+catch(e){done(Math.round(52+Math.random()*42),' (simulated: backend not reachable)');}
 };
-function done(){
-var sc=Math.round(52+Math.random()*42),lab=sc>=80?'Healthy. Close to your normal':sc>=62?'Mild strain. Take care today':'Strained. Rest your voice';
+function done(sc,note){
+var lab=sc>=80?'Healthy. Close to your normal':sc>=62?'Mild strain. Take care today':'Strained. Rest your voice';
 arc.style.stroke=col(sc);arc.style.strokeDashoffset=540.4*(1-sc/100);
 var k=0,iv=setInterval(function(){k+=2;num.textContent=Math.min(k,sc);if(k>=sc){clearInterval(iv);num.textContent=sc;}},16);
-st.textContent=lab;bars[6].style.height=sc+'%';bars[6].style.background=col(sc);
+st.textContent=lab+(note||'');bars[6].style.height=sc+'%';bars[6].style.background=col(sc);
 var t=sc>=80?['Keep sipping water through the day','Do a gentle 2-minute humming warm-up before class']:sc>=62?['Drink a glass of water now','Speak softly and avoid whispering','Take short voice breaks between sessions']:['Rest your voice for a few hours','Drink warm water and avoid shouting','If hoarseness lasts over two weeks, see a doctor'];
-tips.innerHTML=t.map(function(x){return '<li>'+x+'</li>';}).join('');
+tips.innerHTML=t.map(function(x){return '<li>'+x+'</li>';}).join('')+(feat?'<li>'+feat+'</li>':'');
 pg.style.transition='none';pg.style.width='0';rec.disabled=false;rec.textContent='Record again';
 }
 })();
