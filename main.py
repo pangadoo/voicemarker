@@ -5,7 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pipeline import run_preprocessing, extract_features, calculate_score
 
 app = FastAPI(title="Voice Marker API")
-
+@app.get("/")
+async def health_check():
+    return {"status": "online", "message": "Voice Marker API is running."}
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
