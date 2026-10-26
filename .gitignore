@@ -1,0 +1,27 @@
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Uploads & audio files
+uploads/
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.ogg
+
+# Environment & local settings
+.env
+.env.*
+
+# OS generated files
+.DS_Store
+Thumbs.db
